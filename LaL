@@ -1,0 +1,1365 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width">
+    <title>按日期分组的点位聚合（含MAC地址）</title>
+    <link rel="stylesheet" href="https://cache.amap.com/lbs/static/main1119.css" />
+    <link rel="stylesheet" href="https://a.amap.com/jsapi_demos/static/demo-center/css/demo-center.css"/>
+    <style>
+        html, body, #container { height: 100%; width: 100%; }
+        .batch-input-box {
+            position: absolute; top: 20px; left: 30px; z-index: 1000;
+            background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px #0001;
+            transition: opacity 0.3s;
+        }
+        .batch-input-box.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .batch-input-box textarea {
+            width: 450px; height: 150px; font-size: 14px; margin-bottom: 10px;
+        }
+        .batch-input-box button {
+            margin-right: 8px;
+        }
+        .search-box {
+            position: absolute; top: 20px; right: 30px; z-index: 1001;
+            background: #fff; padding: 12px 18px; border-radius: 8px; box-shadow: 0 2px 10px #0001;
+            display: flex; gap: 8px; align-items: center;
+        }
+        .search-box input {
+            padding: 4px 8px; font-size: 15px; border: 1px solid #ccc; border-radius: 4px;
+        }
+        .search-hint {
+            color: #d00;
+            font-size: 13px;
+            margin-left: 12px;
+        }
+        .save-btn {
+            margin-top: 10px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .save-btn:hover {
+            background: #45a049;
+        }
+        .save-toast {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.7); color: #fff; padding: 10px 20px;
+            border-radius: 4px; font-size: 16px; z-index: 2000;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .save-toast.show {
+            opacity: 1;
+        }
+        .legend {
+            position: absolute; bottom: 30px; right: 30px; z-index: 1000;
+            background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 10px #0001;
+        }
+        .legend-item {
+            display: flex; align-items: center; margin: 5px 0;
+        }
+        .legend-color {
+            width: 20px; height: 20px; margin-right: 8px; border-radius: 3px;
+        }
+        .error-toast {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(255,0,0,0.7); color: #fff; padding: 10px 20px;
+            border-radius: 4px; font-size: 16px; z-index: 2000;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .error-toast.show {
+            opacity: 1;
+        }
+        .color-group-box {
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .color-group-title {
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .color-group-options {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .color-group-option {
+            display: flex;
+            align-items: center;
+            margin: 3px 0;
+        }
+        .color-group-option input {
+            margin-right: 8px;
+        }
+        .color-group-option label {
+            flex-grow: 1;
+        }
+        .merge-btn {
+            margin-top: 10px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .merge-btn:hover {
+            background: #0b7dda;
+        }
+        .mac-info-box {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px #0001;
+            max-width: 300px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .highlight-marker {
+            background-color: #FF0000 !important;
+            border: 2px solid #FF0000 !important;
+            z-index: 1000 !important;
+        }
+        
+        /* 登录遮罩层样式 */
+        #loginOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #loginBox {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            width: 300px;
+        }
+        #loginBox h2 {
+            margin-top: 0;
+            text-align: center;
+        }
+        #loginBox input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #loginBox button {
+            width: 100%;
+            padding: 10px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #loginBox button:hover {
+            background: #45a049;
+        }
+        .error-message {
+            color: red;
+            text-align: center;
+            margin-top: 10px;
+            display: none;
+        }
+        
+        /* 用户信息栏 */
+        #userInfoBar {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            z-index: 1000;
+            background: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px #0001;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #logoutBtn {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #logoutBtn:hover {
+            background: #d32f2f;
+        }
+    </style>
+</head>
+<body>
+<!-- 登录遮罩层 -->
+<div id="loginOverlay">
+    <div id="loginBox">
+        <h2>系统登录</h2>
+        <input type="text" id="username" placeholder="用户名" required>
+        <input type="password" id="password" placeholder="密码" required>
+        <button onclick="login()">登录</button>
+        <div id="errorMessage" class="error-message">用户名或密码错误</div>
+    </div>
+</div>
+
+<!-- 用户信息栏 -->
+<div id="userInfoBar" style="display: none;">
+    <span id="currentUser">用户名</span>
+    <button id="logoutBtn" onclick="logout()">退出登录</button>
+</div>
+
+<div id="container" class="map" tabindex="0"></div>
+
+<div class="batch-input-box hidden" id="batchInputBox">
+    <div><b>批量输入点位（经度 纬度 日期 MAC地址，每行一组，日期格式：YYYY-MM-DD）</b></div>
+    <textarea id="pointsInput" placeholder="116.034468044705 25.8690774197049 2024-06-01 AA:BB:CC:DD:EE:FF&#10;116.040073120385 25.8731084338673 2024-06-02 11:22:33:44:55:66"></textarea>
+    <br>
+    <button onclick="updatePointsFromInput()">刷新点位</button>
+    <button onclick="clearPoints()">清空</button>
+    <button class="save-btn" onclick="saveState()">保存状态</button>
+    
+    <div class="color-group-box">
+        <div class="color-group-title">合并日期颜色</div>
+        <div style="margin-bottom: 8px;">
+            <label for="decimalPlaces">经纬度比较精度（小数位）：</label>
+            <select id="decimalPlaces" onchange="saveState()">
+                <option value="4">4位（约10米）</option>
+                <option value="5">5位（约1米）</option>
+                <option value="6">6位（约10厘米）</option>
+            </select>
+        </div>
+        <div class="color-group-options" id="colorGroupOptions">
+            <!-- 日期选项将动态添加到这里 -->
+        </div>
+        <button class="merge-btn" onclick="mergeSelectedDates()">合并选中日期</button>
+        <button class="merge-btn" onclick="resetColorGroups()" style="background: #f44336; margin-left: 5px;">重置颜色分组</button>
+        <button class="merge-btn" id="highlightSameMacBtn" onclick="highlightSameMacSameLocation()" style="background: #FF9800; margin-left: 5px;">高亮相同MAC相同位置</button>
+    </div>
+</div>
+
+<div class="save-toast" id="saveToast">页面已保存</div>
+<div class="error-toast" id="errorToast"></div>
+
+<div class="search-box">
+    <input id="searchInput" type="text" placeholder="输入关键字自动提示" />
+    <span id="searchHint" class="search-hint"></span>
+</div>
+
+<!-- MAC地址信息框 -->
+<div class="mac-info-box" id="macInfoBox" style="display: none;">
+    <div><b>MAC地址信息</b></div>
+    <div id="macInfoContent"></div>
+</div>
+
+<!-- 图例 -->
+<div class="legend" id="legend">
+    <div><b>日期颜色图例</b></div>
+</div>
+
+<script type="text/javascript">
+  window._AMapSecurityConfig = {
+    securityJsCode: "a9d5083fa28f0fc8959099d249c2b578",
+  };
+</script>
+<script src="https://webapi.amap.com/maps?v=2.0&key=5581503468e70e9f5af4c79225864a04"></script> 
+
+<script type="text/javascript">
+    // 地图相关变量
+    var map = new AMap.Map("container", {
+        zoom: 13,
+        center: [116.397428, 39.90923] // 默认中心点（北京）
+    });
+
+    var gridSize = 60;
+    var allPoints = []; // 所有点位数据
+    var clusters = {};  // 按日期存储的聚合器
+    var searchMarker = null;
+    var dateColorMap = {}; // 日期颜色映射
+    var dateCountMap = {}; // 日期点位数量统计
+    var firstValidPoint = null; // 第一个有效点位
+    var colorGroups = {}; // 颜色分组，key为颜色，value为日期数组
+    var mergedClusters = {}; // 合并后的聚合器
+    var macInfoMap = {}; // MAC地址信息映射
+    var highlightedMarkers = []; // 高亮显示的标记
+    var originalMapState = null; // 保存原始地图状态
+
+    // 基础颜色（红、黄、蓝、绿、黑）
+    var baseColors = [
+        "#FF0000", // 红
+        "#FFFF00", // 黄
+        "#0000FF", // 蓝
+        "#00FF00", // 绿
+        "#000000"  // 黑
+    ];
+
+    // 用户数据（实际应用中应该从服务器获取）
+    const users = [
+        { 
+            username: "admin", 
+            password: "admin123",
+            name: "管理员"
+        },
+        { 
+            username: "user1", 
+            password: "user123",
+            name: "用户1"
+        }
+    ];
+
+    // 登录函数
+    function login() {
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        const errorMessage = document.getElementById('errorMessage');
+        
+        // 验证用户
+        const user = users.find(u => 
+            u.username === username && u.password === password
+        );
+        
+        if (user) {
+            // 登录成功
+            // 存储登录状态（有效期1天）
+            const expiryDate = new Date();
+            expiryDate.setDate(expiryDate.getDate() + 1);
+            document.cookie = `loggedIn=true; expires=${expiryDate.toUTCString()}; path=/`;
+            localStorage.setItem('currentUser', JSON.stringify({
+                username: user.username,
+                name: user.name
+            }));
+            
+            // 隐藏登录框，显示用户信息栏
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('userInfoBar').style.display = 'flex';
+            document.getElementById('currentUser').textContent = user.name;
+            
+            // 加载地图数据
+            loadState();
+        } else {
+            // 显示错误信息
+            errorMessage.style.display = 'block';
+        }
+    }
+
+    // 退出登录
+    function logout() {
+        // 清除登录状态
+        document.cookie = 'loggedIn=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+        localStorage.removeItem('currentUser');
+        
+        // 显示登录框，隐藏用户信息栏
+        document.getElementById('loginOverlay').style.display = 'flex';
+        document.getElementById('userInfoBar').style.display = 'none';
+        
+        // 清除地图数据
+        clearPoints();
+    }
+
+    // 检查登录状态
+    function checkLogin() {
+        // 检查cookie中的登录状态
+        const cookies = document.cookie.split(';').map(c => c.trim());
+        const isLoggedIn = cookies.some(c => c.startsWith('loggedIn='));
+        
+        if (isLoggedIn) {
+            // 尝试从localStorage获取用户信息
+            const userStr = localStorage.getItem('currentUser');
+            if (userStr) {
+                try {
+                    const user = JSON.parse(userStr);
+                    
+                    // 验证用户是否仍然有效
+                    const validUser = users.find(u => u.username === user.username);
+                    if (validUser) {
+                        // 更新UI
+                        document.getElementById('loginOverlay').style.display = 'none';
+                        document.getElementById('userInfoBar').style.display = 'flex';
+                        document.getElementById('currentUser').textContent = validUser.name;
+                        
+                        // 加载地图数据
+                        loadState();
+                        return;
+                    }
+                } catch (e) {
+                    console.error('解析用户信息错误:', e);
+                }
+            }
+        }
+        
+        // 未登录或登录无效
+        document.getElementById('loginOverlay').style.display = 'flex';
+        document.getElementById('userInfoBar').style.display = 'none';
+    }
+
+    // 显示错误提示
+    function showError(message) {
+        var errorToast = document.getElementById('errorToast');
+        errorToast.textContent = message;
+        errorToast.classList.add('show');
+        setTimeout(function() {
+            errorToast.classList.remove('show');
+        }, 3000);
+    }
+
+    // 根据日期获取颜色
+    function getColorForDate(dateStr) {
+        // 检查是否在颜色分组中
+        for (var color in colorGroups) {
+            if (colorGroups[color].includes(dateStr)) {
+                return color;
+            }
+        }
+        
+        // 如果没有在分组中，使用默认颜色
+        if (!dateColorMap[dateStr]) {
+            var colorIndex = Object.keys(dateColorMap).length % baseColors.length;
+            dateColorMap[dateStr] = baseColors[colorIndex];
+        }
+        return dateColorMap[dateStr];
+    }
+
+    // 清除所有聚合器
+    function clearClusters() {
+        // 清除普通日期的聚合器
+        for (var date in clusters) {
+            if (clusters[date]) {
+                clusters[date].setMap(null);
+            }
+        }
+        clusters = {};
+        
+        // 清除合并后的聚合器
+        for (var color in mergedClusters) {
+            if (mergedClusters[color]) {
+                mergedClusters[color].setMap(null);
+            }
+        }
+        mergedClusters = {};
+        
+        // 清除高亮标记
+        highlightedMarkers.forEach(function(marker) {
+            map.remove(marker);
+        });
+        highlightedMarkers = [];
+    }
+
+    // 为指定日期创建聚合器
+    function createClusterForDate(date, points) {
+        if (points.length === 0) return;
+        
+        var color = getColorForDate(date);
+        
+        var _renderClusterMarker = function (context) {
+            var div = document.createElement('div');
+            div.style.backgroundColor = color;
+            div.style.opacity = '0.7';
+            var size = Math.round(30 + Math.pow(context.count / (points.length || 1), 1 / 5) * 20);
+            div.style.width = div.style.height = size + 'px';
+            div.style.border = 'solid 1px ' + color;
+            div.style.borderRadius = size / 2 + 'px';
+            div.innerHTML = context.count;
+            div.style.lineHeight = size + 'px';
+            div.style.color = '#000';
+            div.style.fontSize = '14px';
+            div.style.textAlign = 'center';
+            context.marker.setOffset(new AMap.Pixel(-size / 2, -size / 2));
+            context.marker.setContent(div);
+        };
+
+        var _renderMarker = function(context) {
+            var content = '<div style="background-color: ' + color + '; height: 12px; width: 12px; border: 1px solid ' + color + '; border-radius: 6px;"></div>';
+            var offset = new AMap.Pixel(-6, -6);
+            context.marker.setContent(content);
+            context.marker.setOffset(offset);
+            
+            // 添加点击事件显示MAC地址信息
+            context.marker.on('click', function() {
+                var macInfoBox = document.getElementById('macInfoBox');
+                var macInfoContent = document.getElementById('macInfoContent');
+                
+                // 查找该位置的MAC地址信息
+                var pointInfo = allPoints.find(function(point) {
+                    return point.lnglat[0] === context.data.lnglat[0] && 
+                           point.lnglat[1] === context.data.lnglat[1] && 
+                           point.date === date;
+                });
+                
+                if (pointInfo && pointInfo.mac) {
+                    macInfoContent.innerHTML = '<div>MAC地址: ' + pointInfo.mac + '</div>' +
+                                              '<div>日期: ' + pointInfo.date + '</div>' +
+                                              '<div>经度: ' + pointInfo.lnglat[0] + '</div>' +
+                                              '<div>纬度: ' + pointInfo.lnglat[1] + '</div>';
+                    macInfoBox.style.display = 'block';
+                }
+            });
+        };
+
+        AMap.plugin(["AMap.MarkerCluster"], function () {
+            clusters[date] = new AMap.MarkerCluster(map, points, {
+                gridSize: gridSize,
+                renderClusterMarker: _renderClusterMarker,
+                renderMarker: _renderMarker,
+                maxZoom: 18
+            });
+            clusters[date].setMap(map);
+        });
+    }
+
+    // 为合并的日期创建聚合器
+    function createMergedCluster(color, points) {
+        if (points.length === 0) return;
+        
+        var _renderClusterMarker = function (context) {
+            var div = document.createElement('div');
+            div.style.backgroundColor = color;
+            div.style.opacity = '0.7';
+            var size = Math.round(30 + Math.pow(context.count / (points.length || 1), 1 / 5) * 20);
+            div.style.width = div.style.height = size + 'px';
+            div.style.border = 'solid 1px ' + color;
+            div.style.borderRadius = size / 2 + 'px';
+            div.innerHTML = context.count;
+            div.style.lineHeight = size + 'px';
+            div.style.color = '#000';
+            div.style.fontSize = '14px';
+            div.style.textAlign = 'center';
+            context.marker.setOffset(new AMap.Pixel(-size / 2, -size / 2));
+            context.marker.setContent(div);
+        };
+
+        var _renderMarker = function(context) {
+            var content = '<div style="background-color: ' + color + '; height: 12px; width: 12px; border: 1px solid ' + color + '; border-radius: 6px;"></div>';
+            var offset = new AMap.Pixel(-6, -6);
+            context.marker.setContent(content);
+            context.marker.setOffset(offset);
+            
+            // 添加点击事件显示MAC地址信息
+            context.marker.on('click', function() {
+                var macInfoBox = document.getElementById('macInfoBox');
+                var macInfoContent = document.getElementById('macInfoContent');
+                
+                // 查找该位置的MAC地址信息
+                var pointInfo = allPoints.find(function(point) {
+                    return point.lnglat[0] === context.data.lnglat[0] && 
+                           point.lnglat[1] === context.data.lnglat[1];
+                });
+                
+                if (pointInfo && pointInfo.mac) {
+                    macInfoContent.innerHTML = '<div>MAC地址: ' + pointInfo.mac + '</div>' +
+                                              '<div>日期: ' + pointInfo.date + '</div>' +
+                                              '<div>经度: ' + pointInfo.lnglat[0] + '</div>' +
+                                              '<div>纬度: ' + pointInfo.lnglat[1] + '</div>';
+                    macInfoBox.style.display = 'block';
+                }
+            });
+        };
+
+        AMap.plugin(["AMap.MarkerCluster"], function () {
+            mergedClusters[color] = new AMap.MarkerCluster(map, points, {
+                gridSize: gridSize,
+                renderClusterMarker: _renderClusterMarker,
+                renderMarker: _renderMarker,
+                maxZoom: 18
+            });
+            mergedClusters[color].setMap(map);
+        });
+    }
+
+    // 更新日期选择器
+    function updateColorGroupOptions() {
+        var colorGroupOptions = document.getElementById('colorGroupOptions');
+        colorGroupOptions.innerHTML = '';
+        
+        // 按日期排序
+        var sortedDates = Object.keys(dateCountMap).sort();
+        
+        sortedDates.forEach(function(date) {
+            var count = dateCountMap[date];
+            var color = getColorForDate(date);
+            
+            var dateOption = document.createElement('div');
+            dateOption.className = 'color-group-option';
+            
+            var checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = 'date-' + date;
+            checkbox.value = date;
+            
+            var label = document.createElement('label');
+            label.htmlFor = 'date-' + date;
+            label.textContent = date + ' (' + count + '个点)';
+            label.style.color = color;
+            
+            dateOption.appendChild(checkbox);
+            dateOption.appendChild(label);
+            colorGroupOptions.appendChild(dateOption);
+        });
+    }
+
+    // 合并选中的日期
+    function mergeSelectedDates() {
+        var checkboxes = document.querySelectorAll('#colorGroupOptions input[type="checkbox"]:checked');
+        if (checkboxes.length < 2) {
+            showError('请至少选择两个日期进行合并');
+            return;
+        }
+        
+        // 获取选中的日期
+        var selectedDates = Array.from(checkboxes).map(function(checkbox) {
+            return checkbox.value;
+        });
+        
+        // 选择一个颜色（使用第一个日期的颜色）
+        var color = getColorForDate(selectedDates[0]);
+        
+        // 创建或更新颜色分组
+        colorGroups[color] = selectedDates;
+        
+        // 刷新地图
+        refreshMap();
+        
+        // 更新图例
+        updateLegend();
+        
+        // 保存状态
+        saveState();
+    }
+
+    // 重置颜色分组
+    function resetColorGroups() {
+        colorGroups = {};
+        refreshMap();
+        updateLegend();
+        saveState();
+    }
+
+    // 刷新地图显示
+    function refreshMap() {
+        clearClusters();
+        
+        // 处理合并的日期组
+        for (var color in colorGroups) {
+            var dates = colorGroups[color];
+            var mergedPoints = [];
+            
+            // 收集所有合并日期的点位
+            dates.forEach(function(date) {
+                var points = allPoints.filter(function(point) {
+                    return point.date === date;
+                });
+                mergedPoints = mergedPoints.concat(points);
+            });
+            
+            // 为合并的日期创建聚合器
+            createMergedCluster(color, mergedPoints);
+        }
+        
+        // 为未合并的日期创建聚合器
+        for (var date in dateCountMap) {
+            var isMerged = false;
+            for (var color in colorGroups) {
+                if (colorGroups[color].includes(date)) {
+                    isMerged = true;
+                    break;
+                }
+            }
+            
+            if (!isMerged) {
+                var points = allPoints.filter(function(point) {
+                    return point.date === date;
+                });
+                createClusterForDate(date, points);
+            }
+        }
+    }
+
+    // 更新图例
+    function updateLegend() {
+        var legend = document.getElementById('legend');
+        legend.innerHTML = '<div><b>日期颜色图例</b></div>';
+        
+        // 处理颜色分组
+        var processedDates = new Set();
+        
+        // 先添加颜色分组
+        for (var color in colorGroups) {
+            var dates = colorGroups[color];
+            var totalCount = dates.reduce(function(sum, date) {
+                return sum + (dateCountMap[date] || 0);
+            }, 0);
+            
+            var legendItem = document.createElement('div');
+            legendItem.className = 'legend-item';
+            
+            var colorBox = document.createElement('div');
+            colorBox.className = 'legend-color';
+            colorBox.style.backgroundColor = color;
+            
+            var text = document.createElement('span');
+            text.textContent = '合并日期: ' + dates.join(', ') + ' (' + totalCount + '个点)';
+            
+            legendItem.appendChild(colorBox);
+            legendItem.appendChild(text);
+            legend.appendChild(legendItem);
+            
+            // 标记这些日期已处理
+            dates.forEach(function(date) {
+                processedDates.add(date);
+            });
+        }
+        
+        // 添加未分组的日期
+        var sortedDates = Object.keys(dateCountMap).sort();
+        sortedDates.forEach(function(date) {
+            if (!processedDates.has(date)) {
+                var count = dateCountMap[date];
+                var color = getColorForDate(date);
+                
+                var legendItem = document.createElement('div');
+                legendItem.className = 'legend-item';
+                
+                var colorBox = document.createElement('div');
+                colorBox.className = 'legend-color';
+                colorBox.style.backgroundColor = color;
+                
+                var text = document.createElement('span');
+                text.textContent = date + ' (' + count + '个点)';
+                
+                legendItem.appendChild(colorBox);
+                legendItem.appendChild(text);
+                legend.appendChild(legendItem);
+            }
+        });
+    }
+
+    // 高亮显示相同MAC地址在所有所选日期都相同位置的点位（同一位置只计数一次）
+    function highlightSameMacSameLocation() {
+        console.log("执行高亮相同MAC相同位置功能");
+        
+        // 获取用户选择的小数位数
+        var decimalPlaces = parseInt(document.getElementById('decimalPlaces').value) || 4;
+        var multiplier = Math.pow(10, decimalPlaces);
+        
+        // 清除之前的高亮标记
+        highlightedMarkers.forEach(function(marker) {
+            map.remove(marker);
+        });
+        highlightedMarkers = [];
+        
+        // 获取当前选中的日期
+        var checkboxes = document.querySelectorAll('#colorGroupOptions input[type="checkbox"]:checked');
+        if (checkboxes.length === 0) {
+            showError('请至少选择一个日期');
+            return;
+        }
+        
+        var selectedDates = Array.from(checkboxes).map(function(checkbox) {
+            return checkbox.value;
+        });
+        
+        console.log("选中的日期:", selectedDates);
+        
+        // 筛选出选中日期的点位
+        var selectedPoints = allPoints.filter(function(point) {
+            return selectedDates.includes(point.date);
+        });
+        
+        if (selectedPoints.length === 0) {
+            showError('所选日期范围内没有数据');
+            return;
+        }
+        
+        console.log("选中日期的点位数量:", selectedPoints.length);
+        
+        // 按MAC地址分组
+        var macGroups = {};
+        selectedPoints.forEach(function(point) {
+            if (!macGroups[point.mac]) {
+                macGroups[point.mac] = {};
+            }
+            if (!macGroups[point.mac][point.date]) {
+                macGroups[point.mac][point.date] = [];
+            }
+            macGroups[point.mac][point.date].push(point);
+        });
+        
+        console.log("MAC分组:", macGroups);
+        
+        // 找出在所有所选日期都有相同位置的MAC地址
+        var consistentMacLocations = [];
+        for (var mac in macGroups) {
+            var dateLocations = macGroups[mac];
+            
+            // 检查是否在所有所选日期都有数据
+            var hasAllDates = selectedDates.every(function(date) {
+                return dateLocations[date] && dateLocations[date].length > 0;
+            });
+            
+            if (!hasAllDates) {
+                console.log("MAC", mac, "不在所有选中日期都有数据");
+                continue;
+            }
+            
+            // 获取每个日期的位置（使用用户指定的小数位数）
+            var locationsByDate = {};
+            selectedDates.forEach(function(date) {
+                locationsByDate[date] = [];
+                var uniqueLocations = new Set(); // 用于去重
+                
+                dateLocations[date].forEach(function(point) {
+                    // 确保经纬度存在且是数字
+                    if (point.lnglat && 
+                        typeof point.lnglat.getLng === 'function' && 
+                        typeof point.lnglat.getLat === 'function') {
+                        // 使用高德地图LngLat对象的getLng和getLat方法
+                        var lng = Math.round(point.lnglat.getLng() * multiplier) / multiplier;
+                        var lat = Math.round(point.lnglat.getLat() * multiplier) / multiplier;
+                        var locKey = lng + ',' + lat;
+                        if (!uniqueLocations.has(locKey)) {
+                            uniqueLocations.add(locKey);
+                            locationsByDate[date].push(locKey);
+                        }
+                    } else if (Array.isArray(point.lnglat) && 
+                              point.lnglat.length === 2 && 
+                              typeof point.lnglat[0] === 'number' && 
+                              typeof point.lnglat[1] === 'number') {
+                        // 如果是数组形式
+                        var lng = Math.round(point.lnglat[0] * multiplier) / multiplier;
+                        var lat = Math.round(point.lnglat[1] * multiplier) / multiplier;
+                        var locKey = lng + ',' + lat;
+                        if (!uniqueLocations.has(locKey)) {
+                            uniqueLocations.add(locKey);
+                            locationsByDate[date].push(locKey);
+                        }
+                    } else {
+                        console.warn("无效的经纬度数据:", point);
+                    }
+                });
+            });
+            
+            console.log("MAC", mac, "各日期位置:", locationsByDate);
+            
+            // 检查是否有日期没有有效位置
+            var hasInvalidDates = selectedDates.some(function(date) {
+                return locationsByDate[date].length === 0;
+            });
+            
+            if (hasInvalidDates) {
+                console.log("MAC", mac, "在某些日期没有有效位置");
+                continue;
+            }
+            
+            // 找出在所有日期都出现的位置
+            var commonLocations = locationsByDate[selectedDates[0]];
+            for (var i = 1; i < selectedDates.length; i++) {
+                var currentLocations = locationsByDate[selectedDates[i]];
+                commonLocations = commonLocations.filter(function(loc) {
+                    return currentLocations.indexOf(loc) !== -1;
+                });
+                if (commonLocations.length === 0) break;
+            }
+            
+            console.log("MAC", mac, "共同位置:", commonLocations);
+            
+            // 如果有在所有日期都出现的位置
+            if (commonLocations.length > 0) {
+                // 取第一个共同位置
+                var refLoc = commonLocations[0];
+                var lnglatParts = refLoc.split(',');
+                if (lnglatParts.length === 2) {
+                    var lng = parseFloat(lnglatParts[0]);
+                    var lat = parseFloat(lnglatParts[1]);
+                    
+                    // 验证坐标是否有效
+                    if (!isNaN(lng) && !isNaN(lat) && 
+                        lng >= -180 && lng <= 180 && 
+                        lat >= -90 && lat <= 90) {
+                        
+                        // 收集该位置的所有点位（去重）
+                        var consistentPoints = [];
+                        var addedPoints = new Set(); // 用于去重
+                        
+                        selectedDates.forEach(function(date) {
+                            dateLocations[date].forEach(function(point) {
+                                try {
+                                    var pointLoc;
+                                    if (point.lnglat && 
+                                        typeof point.lnglat.getLng === 'function' && 
+                                        typeof point.lnglat.getLat === 'function') {
+                                        // 高德地图LngLat对象
+                                        var lng = Math.round(point.lnglat.getLng() * multiplier) / multiplier;
+                                        var lat = Math.round(point.lnglat.getLat() * multiplier) / multiplier;
+                                        pointLoc = lng + ',' + lat;
+                                    } else if (Array.isArray(point.lnglat) && 
+                                              point.lnglat.length === 2 && 
+                                              typeof point.lnglat[0] === 'number' && 
+                                              typeof point.lnglat[1] === 'number') {
+                                        // 数组形式
+                                        var lng = Math.round(point.lnglat[0] * multiplier) / multiplier;
+                                        var lat = Math.round(point.lnglat[1] * multiplier) / multiplier;
+                                        pointLoc = lng + ',' + lat;
+                                    }
+                                    
+                                    // 检查是否是该位置且未被添加过
+                                    if (pointLoc === refLoc && !addedPoints.has(pointLoc + point.mac)) {
+                                        consistentPoints.push(point);
+                                        addedPoints.add(pointLoc + point.mac); // 使用位置+MAC作为唯一标识
+                                    }
+                                } catch (e) {
+                                    console.error("比较位置时出错:", e, point);
+                                }
+                            });
+                        });
+                        
+                        consistentMacLocations.push({
+                            mac: mac,
+                            lnglat: [lng, lat],
+                            points: consistentPoints,
+                            dates: selectedDates,
+                            count: consistentPoints.length // 这里已经是去重后的数量
+                        });
+                    }
+                }
+            }
+        }
+        
+        console.log("符合条件的MAC位置:", consistentMacLocations);
+        
+        // 清除所有现有聚合器
+        clearClusters();
+        
+        // 如果没有找到符合条件的点位，显示错误并返回
+        if (consistentMacLocations.length === 0) {
+            showError('所选日期范围内没有发现MAC地址在所有日期都相同位置的点位');
+            return;
+        }
+        
+        // 创建新的聚合器，只显示符合条件的点位
+        var consistentPoints = [];
+        consistentMacLocations.forEach(function(item) {
+            consistentPoints = consistentPoints.concat(item.points);
+        });
+        
+        console.log("要显示的点位数量(去重后):", consistentPoints.length);
+        
+        // 使用红色作为高亮颜色
+        var highlightColor = "#FF0000";
+        
+        // 创建聚合器
+        var _renderClusterMarker = function (context) {
+            var div = document.createElement('div');
+            div.style.backgroundColor = highlightColor;
+            div.style.opacity = '0.7';
+            var size = Math.round(30 + Math.pow(context.count / (consistentPoints.length || 1), 1 / 5) * 20);
+            div.style.width = div.style.height = size + 'px';
+            div.style.border = 'solid 1px ' + highlightColor;
+            div.style.borderRadius = size / 2 + 'px';
+            div.innerHTML = context.count;
+            div.style.lineHeight = size + 'px';
+            div.style.color = '#000';
+            div.style.fontSize = '14px';
+            div.style.textAlign = 'center';
+            context.marker.setOffset(new AMap.Pixel(-size / 2, -size / 2));
+            context.marker.setContent(div);
+        };
+
+        var _renderMarker = function(context) {
+            var content = '<div style="background-color: ' + highlightColor + '; height: 12px; width: 12px; border: 1px solid ' + highlightColor + '; border-radius: 6px;"></div>';
+            var offset = new AMap.Pixel(-6, -6);
+            context.marker.setContent(content);
+            context.marker.setOffset(offset);
+            
+            // 添加点击事件显示MAC地址信息
+            context.marker.on('click', function() {
+                var macInfoBox = document.getElementById('macInfoBox');
+                var macInfoContent = document.getElementById('macInfoContent');
+                
+                // 查找该位置的MAC地址信息
+                var pointInfo = consistentPoints.find(function(point) {
+                    return point.lnglat.getLng ? 
+                           (point.lnglat.getLng() === context.data.lnglat.getLng() && 
+                            point.lnglat.getLat() === context.data.lnglat.getLat()) : 
+                           (point.lnglat[0] === context.data.lnglat[0] && 
+                            point.lnglat[1] === context.data.lnglat[1]);
+                });
+                
+                if (pointInfo && pointInfo.mac) {
+                    macInfoContent.innerHTML = '<div>MAC地址: ' + pointInfo.mac + '</div>' +
+                                              '<div>日期: ' + pointInfo.date + '</div>' +
+                                              '<div>经度: ' + (pointInfo.lnglat.getLng ? pointInfo.lnglat.getLng() : pointInfo.lnglat[0]) + '</div>' +
+                                              '<div>纬度: ' + (pointInfo.lnglat.getLat ? pointInfo.lnglat.getLat() : pointInfo.lnglat[1]) + '</div>';
+                    macInfoBox.style.display = 'block';
+                }
+            });
+        };
+
+        AMap.plugin(["AMap.MarkerCluster"], function () {
+            // 创建新的聚合器
+            var cluster = new AMap.MarkerCluster(map, consistentPoints, {
+                gridSize: gridSize,
+                renderClusterMarker: _renderClusterMarker,
+                renderMarker: _renderMarker,
+                maxZoom: 18
+            });
+            cluster.setMap(map);
+            
+            // 保存这个聚合器，以便后续清除
+            clusters['highlight'] = cluster;
+        });
+        
+        // 调整地图视野以显示所有高亮标记
+        if (consistentMacLocations.length > 0) {
+            var validLnglats = consistentMacLocations.filter(function(item) {
+                return Array.isArray(item.lnglat) && 
+                       item.lnglat.length === 2 && 
+                       !isNaN(item.lnglat[0]) && !isNaN(item.lnglat[1]);
+            }).map(function(item) {
+                return item.lnglat;
+            });
+                
+            if (validLnglats.length > 0) {
+                map.setFitView(validLnglats);
+            }
+        }
+    }
+
+    function updatePointsFromInput() {
+        var input = document.getElementById('pointsInput').value.trim();
+        if (!input) {
+            showError('请输入经纬度数据');
+            return;
+        }
+        
+        var lines = input.split('\n');
+        allPoints = [];
+        dateColorMap = {};
+        dateCountMap = {};
+        colorGroups = {}; // 重置颜色分组
+        macInfoMap = {}; // 重置MAC地址信息
+        var pointsByDate = {};
+        var validPoints = 0;
+        firstValidPoint = null; // 重置第一个有效点位
+        var invalidLines = []; // 记录无效行
+        
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (!line) continue; // 跳过空行
+            
+            // 使用更灵活的分隔符（空格、逗号、中文逗号）
+            var parts = line.split(/[\s,，]+/);
+            
+            // 检查是否有足够的部分（至少4个：经度、纬度、日期、MAC）
+            if (parts.length < 4) {
+                invalidLines.push({line: line, reason: "数据列不足，需要至少4列（经度 纬度 日期 MAC）"});
+                continue;
+            }
+            
+            // 解析经纬度
+            var lng = parseFloat(parts[0]);
+            var lat = parseFloat(parts[1]);
+            
+            // 验证经纬度
+            if (isNaN(lng) || isNaN(lat)) {
+                invalidLines.push({line: line, reason: "经纬度不是有效数字"});
+                continue;
+            }
+            
+            if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+                invalidLines.push({line: line, reason: "经纬度超出有效范围（经度-180到180，纬度-90到90）"});
+                continue;
+            }
+            
+            // 验证日期格式
+            var dateStr = parts[2];
+            if (!dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                invalidLines.push({line: line, reason: "日期格式不正确，应为YYYY-MM-DD"});
+                continue;
+            }
+            
+            // 验证MAC地址格式
+            var mac = parts[3];
+            if (!mac.match(/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/)) {
+                invalidLines.push({line: line, reason: "MAC地址格式不正确"});
+                continue;
+            }
+            
+            // 创建点位对象
+            var point = {
+                lnglat: [lng, lat],
+                date: dateStr,
+                mac: mac
+            };
+            
+            allPoints.push(point);
+            validPoints++;
+            
+            // 记录第一个有效点位
+            if (!firstValidPoint) {
+                firstValidPoint = point;
+            }
+            
+            // 按日期分组
+            if (!pointsByDate[dateStr]) {
+                pointsByDate[dateStr] = [];
+                dateCountMap[dateStr] = 0;
+            }
+            pointsByDate[dateStr].push(point);
+            dateCountMap[dateStr]++;
+            
+            // 记录MAC地址信息
+            macInfoMap[mac] = {
+                lnglat: [lng, lat],
+                date: dateStr
+            };
+        }
+        
+        // 显示无效数据提示
+        if (invalidLines.length > 0) {
+            var errorMsg = "发现 " + invalidLines.length + " 行无效数据:\n\n";
+            invalidLines.forEach(function(item, index) {
+                if (index < 5) { // 只显示前5个错误示例
+                    errorMsg += "行内容: " + item.line + "\n原因: " + item.reason + "\n\n";
+                }
+            });
+            if (invalidLines.length > 5) {
+                errorMsg += "..." + (invalidLines.length - 5) + " 更多错误行未显示\n";
+            }
+            errorMsg += "\n有效数据: " + validPoints + " 行";
+            showError(errorMsg);
+        } else if (validPoints === 0) {
+            showError('没有解析到任何有效数据！\n请确保每行格式为：经度 纬度 日期(YYYY-MM-DD) MAC地址');
+            return;
+        }
+        
+        // 更新日期选择器
+        updateColorGroupOptions();
+        
+        // 使用第一个有效点位作为中心点
+        if (firstValidPoint) {
+            map.setCenter(firstValidPoint.lnglat);
+            // 根据点位数量调整缩放级别
+            var zoomLevel = 13;
+            if (validPoints > 100) zoomLevel = 10;
+            else if (validPoints > 50) zoomLevel = 11;
+            else if (validPoints > 20) zoomLevel = 12;
+            map.setZoom(zoomLevel);
+        } else {
+            showError('无法确定有效的中心点');
+        }
+        
+        // 刷新地图
+        refreshMap();
+        
+        // 更新图例
+        updateLegend();
+        
+        // 保存状态
+        saveState();
+    }
+
+    function clearPoints() {
+        allPoints = [];
+        dateColorMap = {};
+        dateCountMap = {};
+        colorGroups = {};
+        firstValidPoint = null;
+        macInfoMap = {};
+        clearClusters();
+        document.getElementById('pointsInput').value = '';
+        document.getElementById('colorGroupOptions').innerHTML = '';
+        document.getElementById('macInfoBox').style.display = 'none';
+        updateLegend();
+        saveState();
+    }
+
+    function saveState() {
+        var state = {
+            pointsInput: document.getElementById('pointsInput').value,
+            mapCenter: map.getCenter(),
+            mapZoom: map.getZoom(),
+            inputBoxHidden: document.getElementById('batchInputBox').classList.contains('hidden'),
+            dateColorMap: dateColorMap,
+            dateCountMap: dateCountMap,
+            firstValidPoint: firstValidPoint,
+            colorGroups: colorGroups,
+            macInfoMap: macInfoMap,
+            decimalPlaces: document.getElementById('decimalPlaces').value
+        };
+        localStorage.setItem('mapState', JSON.stringify(state));
+        var toast = document.getElementById('saveToast');
+        toast.classList.add('show');
+        setTimeout(function() {
+            toast.classList.remove('show');
+        }, 1500);
+    }
+
+    function loadState() {
+        var state = localStorage.getItem('mapState');
+        if (state) {
+            try {
+                state = JSON.parse(state);
+                document.getElementById('pointsInput').value = state.pointsInput || '';
+                dateColorMap = state.dateColorMap || {};
+                dateCountMap = state.dateCountMap || {};
+                firstValidPoint = state.firstValidPoint || null;
+                colorGroups = state.colorGroups || {};
+                macInfoMap = state.macInfoMap || {};
+                document.getElementById('decimalPlaces').value = state.decimalPlaces || '4';
+                
+                if (state.pointsInput) {
+                    // 重新解析点位数据
+                    var lines = state.pointsInput.trim().split('\n');
+                    allPoints = [];
+                    var pointsByDate = {};
+                    var validPoints = 0;
+                    
+                    for (var i = 0; i < lines.length; i++) {
+                        var parts = lines[i].trim().split(/[\s,，]+/);
+                        if (parts.length >= 4) {
+                            var lng = parseFloat(parts[0]);
+                            var lat = parseFloat(parts[1]);
+                            var dateStr = parts[2];
+                            var mac = parts[3];
+                            
+                            var point = {
+                                lnglat: [lng, lat],
+                                date: dateStr,
+                                mac: mac
+                            };
+                            
+                            allPoints.push(point);
+                            validPoints++;
+                            
+                            if (!pointsByDate[dateStr]) {
+                                pointsByDate[dateStr] = [];
+                            }
+                            pointsByDate[dateStr].push(point);
+                            
+                            // 记录MAC地址信息
+                            macInfoMap[mac] = {
+                                lnglat: [lng, lat],
+                                date: dateStr
+                            };
+                        }
+                    }
+                    
+                    // 更新日期选择器
+                    updateColorGroupOptions();
+                    
+                    // 设置地图中心和缩放级别
+                    if (state.mapZoom) {
+                        map.setZoom(state.mapZoom);
+                    }
+                    
+                    if (state.mapCenter && 
+                        !isNaN(state.mapCenter.lng) && !isNaN(state.mapCenter.lat)) {
+                        map.setCenter([state.mapCenter.lng, state.mapCenter.lat]);
+                    } else if (firstValidPoint) {
+                        map.setCenter(firstValidPoint.lnglat);
+                    }
+                    
+                    // 刷新地图显示
+                    refreshMap();
+                    
+                    // 更新图例
+                    updateLegend();
+                }
+                
+                if (state.inputBoxHidden) {
+                    document.getElementById('batchInputBox').classList.add('hidden');
+                } else {
+                    document.getElementById('batchInputBox').classList.remove('hidden');
+                }
+            } catch (e) {
+                console.error('加载状态错误:', e);
+                showError('加载保存的状态时出错');
+            }
+        } else {
+            document.getElementById('batchInputBox').classList.add('hidden');
+        }
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.key.toLowerCase() === 'h') {
+            e.preventDefault();
+            var inputBox = document.getElementById('batchInputBox');
+            inputBox.classList.toggle('hidden');
+            saveState();
+        }
+    });
+
+    AMap.plugin(['AMap.PlaceSearch','AMap.AutoComplete'], function(){
+        var auto = new AMap.AutoComplete({
+            input: "searchInput"
+        });
+        var placeSearch = new AMap.PlaceSearch({
+            map: map
+        });
+        auto.on("select", function(e) {
+            document.getElementById('searchHint').innerText = '';
+            if (e.poi && e.poi.location) {
+                map.setCenter(e.poi.location);
+                map.setZoom(16);
+                if (searchMarker) map.remove(searchMarker);
+                searchMarker = new AMap.Marker({
+                    position: e.poi.location,
+                    map: map,
+                    icon: "https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png",
+                    title: e.poi.name
+                });
+            } else {
+                placeSearch.setCity(e.poi.adcode || '');
+                placeSearch.search(e.poi.name, function(status, result){
+                    if (status === 'complete' && result.poiList && result.poiList.pois.length) {
+                        var poi = result.poiList.pois[0];
+                        var lnglat = poi.location;
+                        map.setCenter(lnglat);
+                        map.setZoom(16);
+                        if (searchMarker) map.remove(searchMarker);
+                        searchMarker = new AMap.Marker({
+                            position: lnglat,
+                            map: map,
+                            icon: "https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png",
+                            title: poi.name
+                        });
+                    } else {
+                        document.getElementById('searchHint').innerText = '未找到该地点，请输入更详细的关键字';
+                    }
+                });
+            }
+        });
+    });
+
+    // 页面加载时检查登录状态
+    window.onload = function() {
+        checkLogin();
+        
+        // 添加回车键登录功能
+        document.getElementById('password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                login();
+            }
+        });
+    };
+</script>
+</body>
+</html>
