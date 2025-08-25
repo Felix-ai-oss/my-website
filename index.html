@@ -144,6 +144,10 @@
     <button onclick="updatePointsFromInput()">刷新点位</button>
     <button onclick="clearPoints()">清空</button>
     <button class="save-btn" onclick="saveState()">保存状态</button>
+    <button onclick="exportPoints()">导出点位</button>
+    <button onclick="importPoints()">导入点位</button>
+    <input type="file" id="fileInput" style="display: none;" accept=".txt" onchange="handleFileSelect(event)">
+
     
     <div class="color-group-box">
         <div class="color-group-title">合并日期颜色</div>
@@ -158,9 +162,13 @@
         <div class="color-group-options" id="colorGroupOptions">
             <!-- 日期选项将动态添加到这里 -->
         </div>
-        <button class="merge-btn" onclick="mergeSelectedDates()">合并选中日期</button>
-        <button class="merge-btn" onclick="resetColorGroups()" style="background: #f44336; margin-left: 5px;">重置颜色分组</button>
-        <button class="merge-btn" id="highlightSameMacBtn" onclick="highlightSameMacSameLocation()" style="background: #FF9800; margin-left: 5px;">高亮相同MAC相同位置</button>
+        <div style="margin-top: 10px;">
+            <button class="merge-btn" onclick="showSelectedDates()">显示选中日期</button>
+            <button class="merge-btn" onclick="showAllDates()">显示所有日期</button>
+            <button class="merge-btn" onclick="mergeSelectedDates()">合并选中日期</button>
+            <button class="merge-btn" onclick="resetColorGroups()" style="background: #f44336; margin-left: 5px;">重置颜色分组</button>
+            <button class="merge-btn" id="highlightSameMacBtn" onclick="highlightSameMacSameLocation()" style="background: #FF9800; margin-left: 5px;">高亮相同MAC相同位置</button>
+        </div>
     </div>
 </div>
 
@@ -569,6 +577,87 @@
         });
     }
 
+    // 显示选中日期的点位
+    function showSelectedDates() {
+        var checkboxes = document.querySelectorAll('#colorGroupOptions input[type="checkbox"]:checked');
+        if (checkboxes.length === 0) {
+            showError('请至少选择一个日期');
+            return;
+        }
+        
+        // 获取选中的日期
+        var selectedDates = Array.from(checkboxes).map(function(checkbox) {
+            return checkbox.value;
+        });
+        
+        // 清除所有聚合器
+        clearClusters();
+        
+        // 为每个选中的日期创建聚合器
+        selectedDates.forEach(function(date) {
+            var points = allPoints.filter(function(point) {
+                return point.date === date;
+            });
+            createClusterForDate(date, points);
+        });
+        
+        // 调整地图视野以显示所有选中的点位
+        var selectedPoints = allPoints.filter(function(point) {
+            return selectedDates.includes(point.date);
+        });
+        
+        if (selectedPoints.length > 0) {
+            var lnglats = selectedPoints.map(function(point) {
+                return point.lnglat;
+            });
+            map.setFitView(lnglats);
+        }
+        
+        // 更新图例，只显示选中的日期
+        updateLegendForSelectedDates(selectedDates);
+    }
+
+    // 显示所有日期的点位
+    function showAllDates() {
+        // 清除所有复选框的选中状态
+        var checkboxes = document.querySelectorAll('#colorGroupOptions input[type="checkbox"]');
+        checkboxes.forEach(function(checkbox) {
+            checkbox.checked = false;
+        });
+        
+        // 刷新地图显示所有日期
+        refreshMap();
+        updateLegend();
+    }
+
+    // 为选中的日期更新图例
+    function updateLegendForSelectedDates(selectedDates) {
+        var legend = document.getElementById('legend');
+        legend.innerHTML = '<div><b>日期颜色图例</b></div>';
+        
+        // 按日期排序
+        selectedDates.sort();
+        
+        selectedDates.forEach(function(date) {
+            var count = dateCountMap[date];
+            var color = getColorForDate(date);
+            
+            var legendItem = document.createElement('div');
+            legendItem.className = 'legend-item';
+            
+            var colorBox = document.createElement('div');
+            colorBox.className = 'legend-color';
+            colorBox.style.backgroundColor = color;
+            
+            var text = document.createElement('span');
+            text.textContent = date + ' (' + count + '个点)';
+            
+            legendItem.appendChild(colorBox);
+            legendItem.appendChild(text);
+            legend.appendChild(legendItem);
+        });
+    }
+
     // 高亮显示相同MAC地址在所有所选日期都相同位置的点位（同一位置只计数一次）
     function highlightSameMacSameLocation() {
         console.log("执行高亮相同MAC相同位置功能");
@@ -859,7 +948,65 @@
             }
         }
     }
+    // 导出点位数据为文本文件
+function exportPoints() {
+    var input = document.getElementById('pointsInput').value.trim();
+    if (!input) {
+        showError('没有可导出的数据');
+        return;
+    }
+    
+    var blob = new Blob([input], { type: 'text/plain' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '点位数据_' + new Date().toISOString().slice(0,10) + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    var toast = document.getElementById('saveToast');
+    toast.textContent = '点位数据已导出';
+    toast.classList.add('show');
+    setTimeout(function() {
+        toast.classList.remove('show');
+    }, 1500);
+}
 
+// 触发文件选择对话框
+function importPoints() {
+    document.getElementById('fileInput').click();
+}
+
+// 处理文件选择
+function handleFileSelect(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        // 清空当前输入框
+        document.getElementById('pointsInput').value = '';
+        
+        // 设置文件内容为输入框内容
+        document.getElementById('pointsInput').value = e.target.result;
+        
+        // 更新点位
+        updatePointsFromInput();
+        
+        // 重置文件输入，以便可以再次选择同一文件
+        event.target.value = '';
+        
+        var toast = document.getElementById('saveToast');
+        toast.textContent = '点位数据已导入';
+        toast.classList.add('show');
+        setTimeout(function() {
+            toast.classList.remove('show');
+        }, 1500);
+    };
+    reader.readAsText(file);
+}
     function updatePointsFromInput() {
         var input = document.getElementById('pointsInput').value.trim();
         if (!input) {
