@@ -132,6 +132,24 @@
             border: 2px solid #FF0000 !important;
             z-index: 1000 !important;
         }
+        .new-mac-marker {
+        background-color: #9C27B0 !important; /* 紫色 */
+        border: 2px solid #9C27B0 !important;
+        z-index: 1000 !important;
+    }
+        .new-mac-info-box {
+        position: absolute;
+        bottom: 30px;
+        left: 30px;
+        z-index: 1000;
+        background: white;
+        padding: 10px;
+        border-radius: 5px;
+        box-shadow: 0 2px 10px #0001;
+        max-width: 300px;
+        max-height: 200px;
+        overflow-y: auto;
+    }
     </style>
 </head>
 <body>
@@ -168,8 +186,15 @@
             <button class="merge-btn" onclick="mergeSelectedDates()">合并选中日期</button>
             <button class="merge-btn" onclick="resetColorGroups()" style="background: #f44336; margin-left: 5px;">重置颜色分组</button>
             <button class="merge-btn" id="highlightSameMacBtn" onclick="highlightSameMacSameLocation()" style="background: #FF9800; margin-left: 5px;">高亮相同MAC相同位置</button>
+            <button class="merge-btn" onclick="findNewMacsInSelectedDate()" style="background: #9C27B0; margin-left: 5px;">查找新MAC地址</button>
         </div>
     </div>
+</div>
+
+<!-- 添加新信息框 -->
+<div class="new-mac-info-box" id="newMacInfoBox" style="display: none;">
+    <div><b>新MAC地址信息</b></div>
+    <div id="newMacInfoContent"></div>
 </div>
 
 <div class="save-toast" id="saveToast">页面已保存</div>
@@ -1313,6 +1338,153 @@ function handleFileSelect(event) {
             }
         });
     });
+
+    // 新增函数：查找在选中日期新出现的MAC地址
+    function findNewMacsInSelectedDate() {
+        var checkboxes = document.querySelectorAll('#colorGroupOptions input[type="checkbox"]:checked');
+        if (checkboxes.length !== 1) {
+            showError('请选择一个日期');
+            return;
+        }
+        
+        var selectedDate = checkboxes[0].value;
+        
+        // 获取所有日期并按时间排序
+        var allDates = Object.keys(dateCountMap).sort();
+        
+        // 找到选中日期的索引
+        var selectedDateIndex = allDates.indexOf(selectedDate);
+        if (selectedDateIndex === -1) {
+            showError('未找到选中的日期');
+            return;
+        }
+        
+        // 获取选中日期的MAC地址集合
+        var selectedDateMacs = new Set();
+        allPoints.forEach(function(point) {
+            if (point.date === selectedDate) {
+                selectedDateMacs.add(point.mac);
+            }
+        });
+        
+        // 获取之前所有日期的MAC地址集合
+        var previousDatesMacs = new Set();
+        for (var i = 0; i < selectedDateIndex; i++) {
+            var date = allDates[i];
+            allPoints.forEach(function(point) {
+                if (point.date === date) {
+                    previousDatesMacs.add(point.mac);
+                }
+            });
+        }
+        
+        // 找出在选中日期存在但在之前不存在的MAC地址
+        var newMacs = [];
+        selectedDateMacs.forEach(function(mac) {
+            if (!previousDatesMacs.has(mac)) {
+                newMacs.push(mac);
+            }
+        });
+        
+        if (newMacs.length === 0) {
+            showError('在' + selectedDate + '没有发现新出现的MAC地址');
+            return;
+        }
+        
+        // 清除之前的高亮标记
+        highlightedMarkers.forEach(function(marker) {
+            map.remove(marker);
+        });
+        highlightedMarkers = [];
+        
+        // 清除所有现有聚合器
+        clearClusters();
+        
+        // 收集新MAC地址的点位
+        var newMacPoints = allPoints.filter(function(point) {
+            return point.date === selectedDate && newMacs.includes(point.mac);
+        });
+        
+        // 创建新的聚合器，只显示新MAC地址的点位
+        var highlightColor = "#9C27B0"; // 紫色
+        
+        var _renderClusterMarker = function (context) {
+            var div = document.createElement('div');
+            div.style.backgroundColor = highlightColor;
+            div.style.opacity = '0.7';
+            var size = Math.round(30 + Math.pow(context.count / (newMacPoints.length || 1), 1 / 5) * 20);
+            div.style.width = div.style.height = size + 'px';
+            div.style.border = 'solid 1px ' + highlightColor;
+            div.style.borderRadius = size / 2 + 'px';
+            div.innerHTML = context.count;
+            div.style.lineHeight = size + 'px';
+            div.style.color = '#000';
+            div.style.fontSize = '14px';
+            div.style.textAlign = 'center';
+            context.marker.setOffset(new AMap.Pixel(-size / 2, -size / 2));
+            context.marker.setContent(div);
+        };
+
+        var _renderMarker = function(context) {
+            var content = '<div style="background-color: ' + highlightColor + '; height: 12px; width: 12px; border: 1px solid ' + highlightColor + '; border-radius: 6px;"></div>';
+            var offset = new AMap.Pixel(-6, -6);
+            context.marker.setContent(content);
+            context.marker.setOffset(offset);
+            
+            // 添加点击事件显示MAC地址信息
+            context.marker.on('click', function() {
+                var newMacInfoBox = document.getElementById('newMacInfoBox');
+                var newMacInfoContent = document.getElementById('newMacInfoContent');
+                
+                // 查找该位置的MAC地址信息
+                var pointInfo = newMacPoints.find(function(point) {
+                    return point.lnglat.getLng ? 
+                           (point.lnglat.getLng() === context.data.lnglat.getLng() && 
+                            point.lnglat.getLat() === context.data.lnglat.getLat()) : 
+                           (point.lnglat[0] === context.data.lnglat[0] && 
+                            point.lnglat[1] === context.data.lnglat[1]);
+                });
+                
+                if (pointInfo && pointInfo.mac) {
+                    newMacInfoContent.innerHTML = '<div>新MAC地址: ' + pointInfo.mac + '</div>' +
+                                                 '<div>日期: ' + pointInfo.date + '</div>' +
+                                                 '<div>经度: ' + (pointInfo.lnglat.getLng ? pointInfo.lnglat.getLng() : pointInfo.lnglat[0]) + '</div>' +
+                                                 '<div>纬度: ' + (pointInfo.lnglat.getLat ? pointInfo.lnglat.getLat() : pointInfo.lnglat[1]) + '</div>';
+                    newMacInfoBox.style.display = 'block';
+                }
+            });
+        };
+
+        AMap.plugin(["AMap.MarkerCluster"], function () {
+            // 创建新的聚合器
+            var cluster = new AMap.MarkerCluster(map, newMacPoints, {
+                gridSize: gridSize,
+                renderClusterMarker: _renderClusterMarker,
+                renderMarker: _renderMarker,
+                maxZoom: 18
+            });
+            cluster.setMap(map);
+            
+            // 保存这个聚合器，以便后续清除
+            clusters['newMacs'] = cluster;
+        });
+        
+        // 调整地图视野以显示所有新MAC地址标记
+        if (newMacPoints.length > 0) {
+            var lnglats = newMacPoints.map(function(point) {
+                return point.lnglat;
+            });
+            map.setFitView(lnglats);
+        }
+        
+        // 显示统计信息
+        var toast = document.getElementById('saveToast');
+        toast.textContent = '发现 ' + newMacs.length + ' 个新MAC地址';
+        toast.classList.add('show');
+        setTimeout(function() {
+            toast.classList.remove('show');
+        }, 1500);
+    }
 </script>
 </body>
 </html>
